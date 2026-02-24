@@ -17,10 +17,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - version: "23.05.3"
-            sdk_url: "https://downloads.immortalwrt.org/releases/23.05.3/targets/x86/64/immortalwrt-sdk-23.05.3-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz"
-          - version: "24.10.0"
-            sdk_url: "https://downloads.immortalwrt.org/releases/24.10.0/targets/x86/64/immortalwrt-sdk-24.10.0-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.zst"
+          - version: "23.05.5"
+            sdk_url: "https://downloads.openwrt.org/releases/23.05.5/targets/x86/64/openwrt-sdk-23.05.5-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz"
 
     steps:
     - name: Checkout mwan3nft
@@ -35,14 +33,35 @@ jobs:
 
     - name: Download and extract SDK
       run: |
-        wget -q "${{ matrix.sdk_url }}" -O sdk.tar
-        if [[ "${{ matrix.sdk_url }}" == *.zst ]]; then
-          zstd -d sdk.tar -o sdk.tar.extracted
-          tar -xf sdk.tar.extracted
-        else
+        echo "Downloading SDK from: ${{ matrix.sdk_url }}"
+        wget --no-check-certificate -q "${{ matrix.sdk_url }}" -O sdk.archive || {
+          echo "Primary URL failed, trying mirror..."
+          wget --no-check-certificate -q "https://mirror-03.infra.openwrt.org/releases/${{ matrix.version }}/targets/x86/64/openwrt-sdk-${{ matrix.version }}-x86-64_gcc-*.tar.xz" -O sdk.archive || {
+            echo "Mirror also failed, using OpenWrt official SDK"
+            wget --no-check-certificate -q "https://downloads.openwrt.org/releases/23.05.5/targets/x86/64/openwrt-sdk-23.05.5-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz" -O sdk.archive
+          }
+        }
+        
+        # Extract based on file type
+        file sdk.archive
+        if file sdk.archive | grep -q "XZ"; then
+          tar -xJf sdk.archive
+        elif file sdk.archive | grep -q "Zstandard"; then
+          zstd -d sdk.archive -o sdk.tar
           tar -xf sdk.tar
+        else
+          tar -xf sdk.archive
         fi
-        mv immortalwrt-sdk-* sdk
+        
+        # Find and rename SDK directory
+        SDK_DIR=$(ls -d *-sdk-* 2>/dev/null | head -1)
+        if [ -n "$SDK_DIR" ]; then
+          mv "$SDK_DIR" sdk
+        else
+          echo "SDK directory not found!"
+          ls -la
+          exit 1
+        fi
 
     - name: Copy mwan3nft package
       run: |
