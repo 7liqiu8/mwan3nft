@@ -1,0 +1,26 @@
+{
+	"luci-app-mwan3nft": {
+		"description": "Grant access to mwan3nft configuration",
+		"read": {
+			"file": {
+				"/var/run/mwan3nft/*": [ "read" ],
+				"/etc/config/mwan3nft": [ "read" ]
+			},
+			"ubus": {
+				"luci.mwan3nft": [ "status" ],
+				"file": [ "exec", "read" ],
+				"uci": [ "get", "state" ]
+			},
+			"uci": [ "mwan3nft" ]
+		},
+		"write": {
+			"file": {
+				"/etc/config/mwan3nft": [ "write" ]
+			},
+			"ubus": {
+				"luci": [ "setInitAction" ]
+			},
+			"uci": [ "mwan3nft" ]
+		}
+	}
+}
