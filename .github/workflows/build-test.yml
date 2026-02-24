@@ -1,0 +1,84 @@
+name: Build Test
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, aarch64_cortex-a53]
+        
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup OpenWrt SDK
+      run: |
+        # 下载 OpenWrt SDK
+        if [ "${{ matrix.arch }}" = "x86_64" ]; then
+          SDK_URL="https://downloads.openwrt.org/releases/23.05.3/targets/x86/64/openwrt-sdk-23.05.3-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz"
+        else
+          SDK_URL="https://downloads.openwrt.org/releases/23.05.3/targets/rockchip/armv8/openwrt-sdk-23.05.3-rockchip-armv8_gcc-12.3.0_musl.Linux-x86_64.tar.xz"
+        fi
+        
+        wget -q $SDK_URL -O sdk.tar.xz
+        tar -xf sdk.tar.xz
+        mv openwrt-sdk-* sdk
+
+    - name: Copy package to SDK
+      run: |
+        mkdir -p sdk/package/mwan3nft
+        cp -r Makefile files sdk/package/mwan3nft/
+        cp -r luci-app-mwan3nft sdk/package/
+
+    - name: Update feeds
+      working-directory: sdk
+      run: |
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+
+    - name: Build mwan3nft
+      working-directory: sdk
+      run: |
+        make defconfig
+        make package/mwan3nft/compile V=s -j$(nproc)
+
+    - name: Build luci-app-mwan3nft
+      working-directory: sdk
+      run: |
+        make package/luci-app-mwan3nft/compile V=s -j$(nproc)
+
+    - name: Check build results
+      run: |
+        echo "=== Build Results ==="
+        find sdk/bin -name "*.ipk" -type f
+        
+        if ls sdk/bin/packages/*/base/mwan3nft*.ipk 1> /dev/null 2>&1; then
+          echo "✅ mwan3nft package built successfully"
+        else
+          echo "❌ mwan3nft package build failed"
+          exit 1
+        fi
+        
+        if ls sdk/bin/packages/*/base/luci-app-mwan3nft*.ipk 1> /dev/null 2>&1; then
+          echo "✅ luci-app-mwan3nft package built successfully"
+        else
+          echo "❌ luci-app-mwan3nft package build failed"
+          exit 1
+        fi
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: mwan3nft-${{ matrix.arch }}
+        path: |
+          sdk/bin/packages/*/base/mwan3nft*.ipk
+          sdk/bin/packages/*/base/luci-app-mwan3nft*.ipk
+        retention-days: 7
