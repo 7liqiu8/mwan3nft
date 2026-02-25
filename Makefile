@@ -47,15 +47,6 @@ define Package/mwan3nft/install
 	$(INSTALL_DATA) ./files/usr/lib/mwan3nft/common.sh $(1)/usr/lib/mwan3nft/common.sh
 	$(INSTALL_DATA) ./files/usr/lib/mwan3nft/nft.sh $(1)/usr/lib/mwan3nft/nft.sh
 	$(INSTALL_DATA) ./files/usr/lib/mwan3nft/policy.sh $(1)/usr/lib/mwan3nft/policy.sh
-	# Fix Windows CRLF line endings
-	$(SED) 's/\r$$//' $(1)/usr/sbin/mwan3nft
-	$(SED) 's/\r$$//' $(1)/usr/sbin/mwan3nft-track
-	$(SED) 's/\r$$//' $(1)/etc/init.d/mwan3nft
-	$(SED) 's/\r$$//' $(1)/etc/hotplug.d/iface/15-mwan3nft
-	$(SED) 's/\r$$//' $(1)/usr/lib/mwan3nft/common.sh
-	$(SED) 's/\r$$//' $(1)/usr/lib/mwan3nft/nft.sh
-	$(SED) 's/\r$$//' $(1)/usr/lib/mwan3nft/policy.sh
-	$(SED) 's/\r$$//' $(1)/etc/config/mwan3nft
 endef
 
 $(eval $(call BuildPackage,mwan3nft))
