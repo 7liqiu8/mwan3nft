@@ -33,7 +33,8 @@ mwan3nft 是一个基于 nftables 的多 WAN 负载均衡和故障转移管理�
 
 1. 将 `mwan3nft` 目录复制到 OpenWrt 源码的 `package/` 目录下
 2. 将 `luci-app-mwan3nft` 目录复制到 `package/` 目录下
-3. 编译：
+3. 例如拉取 git clone --depth=1 https://github.com/7liqiu8/mwan3nft package/mwan3nft
+4. 编译：
 
 ```bash
 make menuconfig
@@ -258,3 +259,4 @@ GPL-2.0
 ## 致谢
 
 本项目参考了 OpenWrt 官方的 mwan3 项目设计。
+
