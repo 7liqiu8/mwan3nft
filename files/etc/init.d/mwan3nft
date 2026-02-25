@@ -1,0 +1,141 @@
+#!/bin/sh /etc/rc.common
+# SPDX-License-Identifier: GPL-2.0-only
+# mwan3nft init script
+
+START=90
+STOP=10
+USE_PROCD=1
+
+MWAN3NFT_LIB_DIR="/usr/lib/mwan3nft"
+MWAN3NFT_STATUS_DIR="/var/run/mwan3nft"
+MWAN3NFT_PID_DIR="/var/run/mwan3nft/track"
+
+. /lib/functions.sh
+. /lib/functions/network.sh
+. "${MWAN3NFT_LIB_DIR}/common.sh"
+. "${MWAN3NFT_LIB_DIR}/nft.sh"
+. "${MWAN3NFT_LIB_DIR}/policy.sh"
+
+config_load mwan3nft
+
+mwan3nft_lock() {
+	lock /var/run/mwan3nft.lock
+}
+
+mwan3nft_unlock() {
+	lock -u /var/run/mwan3nft.lock
+}
+
+mwan3nft_init_dirs() {
+	mkdir -p "${MWAN3NFT_STATUS_DIR}"
+	mkdir -p "${MWAN3NFT_PID_DIR}"
+}
+
+mwan3nft_cleanup() {
+	# Stop all tracking processes
+	local pids
+	pids=$(ls "${MWAN3NFT_PID_DIR}"/*.pid 2>/dev/null)
+	for pidfile in $pids; do
+		[ -f "$pidfile" ] && {
+			kill -TERM "$(cat "$pidfile")" 2>/dev/null
+			rm -f "$pidfile"
+		}
+	done
+	
+	# Remove nftables rules
+	mwan3nft_nft_cleanup
+	
+	# Remove routing tables and rules
+	mwan3nft_policy_cleanup
+	
+	# Remove status files
+	rm -rf "${MWAN3NFT_STATUS_DIR}"
+}
+
+start_interface_tracking() {
+	local iface="$1"
+	local enabled family
+	
+	config_get enabled "$iface" enabled 0
+	[ "$enabled" = "0" ] && return
+	
+	config_get family "$iface" family "ipv4"
+	
+	# Start tracking process
+	procd_open_instance "track_${iface}"
+	procd_set_param command /usr/sbin/mwan3nft-track "$iface"
+	procd_set_param respawn
+	procd_set_param pidfile "${MWAN3NFT_PID_DIR}/${iface}.pid"
+	procd_close_instance
+	
+	mwan3nft_log "info" "Started tracking for interface: $iface"
+}
+
+start_service() {
+	local enabled
+	
+	config_get enabled globals enabled 0
+	[ "$enabled" = "0" ] && {
+		mwan3nft_log "info" "mwan3nft is disabled"
+		return 0
+	}
+	
+	mwan3nft_lock
+	
+	mwan3nft_log "info" "Starting mwan3nft service"
+	
+	# Initialize directories
+	mwan3nft_init_dirs
+	
+	# Initialize nftables
+	mwan3nft_nft_init
+	
+	# Initialize routing tables
+	mwan3nft_policy_init
+	
+	# Start interface tracking
+	config_foreach start_interface_tracking interface
+	
+	mwan3nft_unlock
+	
+	mwan3nft_log "info" "mwan3nft service started"
+}
+
+stop_service() {
+	mwan3nft_lock
+	
+	mwan3nft_log "info" "Stopping mwan3nft service"
+	
+	mwan3nft_cleanup
+	
+	mwan3nft_unlock
+	
+	mwan3nft_log "info" "mwan3nft service stopped"
+}
+
+reload_service() {
+	mwan3nft_lock
+	
+	mwan3nft_log "info" "Reloading mwan3nft service"
+	
+	# Reload configuration
+	config_load mwan3nft
+	
+	# Rebuild nftables rules
+	mwan3nft_nft_reload
+	
+	# Rebuild routing policies
+	mwan3nft_policy_reload
+	
+	mwan3nft_unlock
+	
+	mwan3nft_log "info" "mwan3nft service reloaded"
+}
+
+service_triggers() {
+	procd_add_reload_trigger "mwan3nft"
+}
+
+status() {
+	/usr/sbin/mwan3nft status
+}
