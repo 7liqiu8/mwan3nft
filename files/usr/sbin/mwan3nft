@@ -1,0 +1,349 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+# mwan3nft - Multi-WAN manager for nftables
+
+MWAN3NFT_LIB_DIR="/usr/lib/mwan3nft"
+MWAN3NFT_STATUS_DIR="/var/run/mwan3nft"
+
+. /lib/functions.sh
+. /lib/functions/network.sh
+. "${MWAN3NFT_LIB_DIR}/common.sh"
+. "${MWAN3NFT_LIB_DIR}/nft.sh"
+. "${MWAN3NFT_LIB_DIR}/policy.sh"
+
+usage() {
+	cat <<EOF
+Usage: mwan3nft <command> [arguments]
+
+Commands:
+  start                 Start mwan3nft service
+  stop                  Stop mwan3nft service
+  restart               Restart mwan3nft service
+  reload                Reload configuration
+  status                Show interface status
+  interfaces            List all configured interfaces
+  policies              List all configured policies
+  rules                 List all configured rules
+  ifup <interface>      Handle interface up event
+  ifdown <interface>    Handle interface down event
+  ifupdate <interface>  Handle interface update event
+  use <interface> <policy>  Force traffic to use specific interface
+
+EOF
+	exit 1
+}
+
+mwan3nft_lock() {
+	lock /var/run/mwan3nft.lock
+}
+
+mwan3nft_unlock() {
+	lock -u /var/run/mwan3nft.lock
+}
+
+cmd_start() {
+	/etc/init.d/mwan3nft start
+}
+
+cmd_stop() {
+	/etc/init.d/mwan3nft stop
+}
+
+cmd_restart() {
+	/etc/init.d/mwan3nft restart
+}
+
+cmd_reload() {
+	/etc/init.d/mwan3nft reload
+}
+
+cmd_status() {
+	config_load mwan3nft
+
+	local enabled
+	config_get enabled globals enabled 0
+
+	echo "mwan3nft status"
+	echo "==============="
+	echo ""
+
+	if [ "$enabled" = "0" ]; then
+		echo "Service: DISABLED"
+		return
+	fi
+
+	echo "Service: ENABLED"
+	echo ""
+	echo "Interface Status:"
+	echo "-----------------"
+
+	print_interface_status() {
+		local iface="$1"
+		local iface_enabled status device ipaddr gateway
+
+		config_get iface_enabled "$iface" enabled 0
+		[ "$iface_enabled" = "0" ] && return
+
+		# Get status from status file
+		if [ -f "${MWAN3NFT_STATUS_DIR}/${iface}.status" ]; then
+			status=$(cat "${MWAN3NFT_STATUS_DIR}/${iface}.status")
+		else
+			status="unknown"
+		fi
+
+		# Get network info
+		network_get_device device "$iface"
+		network_get_ipaddr ipaddr "$iface"
+		network_get_gateway gateway "$iface"
+
+		printf "  %-12s: %-8s (dev: %-10s ip: %-15s gw: %s)\n" \
+			"$iface" "$status" "${device:-N/A}" "${ipaddr:-N/A}" "${gateway:-N/A}"
+	}
+
+	config_foreach print_interface_status interface
+
+	echo ""
+	echo "Active Policies:"
+	echo "----------------"
+
+	print_policy_status() {
+		local policy="$1"
+		local members=""
+
+		config_list_foreach "$policy" use_member append_member
+
+		echo "  $policy: $members"
+	}
+
+	append_member() {
+		members="${members}${members:+, }$1"
+	}
+
+	config_foreach print_policy_status policy
+
+	echo ""
+	echo "nftables Rules:"
+	echo "---------------"
+	nft list table inet mwan3nft 2>/dev/null || echo "  No rules loaded"
+}
+
+cmd_interfaces() {
+	config_load mwan3nft
+
+	echo "Configured Interfaces:"
+	echo "======================"
+
+	print_interface() {
+		local iface="$1"
+		local enabled family track_method
+
+		config_get enabled "$iface" enabled 0
+		config_get family "$iface" family "ipv4"
+		config_get track_method "$iface" track_method "ping"
+
+		printf "  %-12s: enabled=%s family=%s track=%s\n" \
+			"$iface" "$enabled" "$family" "$track_method"
+	}
+
+	config_foreach print_interface interface
+}
+
+cmd_policies() {
+	config_load mwan3nft
+
+	echo "Configured Policies:"
+	echo "===================="
+
+	print_policy() {
+		local policy="$1"
+		local last_resort members=""
+
+		config_get last_resort "$policy" last_resort "default"
+		config_list_foreach "$policy" use_member append_member
+
+		printf "  %-15s: members=[%s] last_resort=%s\n" \
+			"$policy" "$members" "$last_resort"
+	}
+
+	append_member() {
+		members="${members}${members:+, }$1"
+	}
+
+	config_foreach print_policy policy
+}
+
+cmd_rules() {
+	config_load mwan3nft
+
+	echo "Configured Rules:"
+	echo "================="
+
+	print_rule() {
+		local rule="$1"
+		local src_ip dest_ip src_port dest_port proto use_policy sticky
+
+		config_get src_ip "$rule" src_ip ""
+		config_get dest_ip "$rule" dest_ip ""
+		config_get src_port "$rule" src_port ""
+		config_get dest_port "$rule" dest_port ""
+		config_get proto "$rule" proto ""
+		config_get use_policy "$rule" use_policy ""
+		config_get sticky "$rule" sticky "0"
+
+		echo "  $rule:"
+		[ -n "$src_ip" ] && echo "    src_ip: $src_ip"
+		[ -n "$dest_ip" ] && echo "    dest_ip: $dest_ip"
+		[ -n "$src_port" ] && echo "    src_port: $src_port"
+		[ -n "$dest_port" ] && echo "    dest_port: $dest_port"
+		[ -n "$proto" ] && echo "    proto: $proto"
+		echo "    policy: $use_policy"
+		echo "    sticky: $sticky"
+	}
+
+	config_foreach print_rule rule
+}
+
+cmd_ifup() {
+	local iface="$1"
+
+	[ -z "$iface" ] && {
+		echo "Error: interface name required"
+		exit 1
+	}
+
+	mwan3nft_lock
+
+	mwan3nft_log "info" "Interface up: $iface"
+
+	config_load mwan3nft
+
+	# Update interface status
+	echo "online" > "${MWAN3NFT_STATUS_DIR}/${iface}.status"
+
+	# Update nftables rules
+	mwan3nft_nft_update_interface "$iface" "online"
+
+	# Update routing policy
+	mwan3nft_policy_update_interface "$iface" "online"
+
+	mwan3nft_unlock
+}
+
+cmd_ifdown() {
+	local iface="$1"
+
+	[ -z "$iface" ] && {
+		echo "Error: interface name required"
+		exit 1
+	}
+
+	mwan3nft_lock
+
+	mwan3nft_log "info" "Interface down: $iface"
+
+	config_load mwan3nft
+
+	# Update interface status
+	echo "offline" > "${MWAN3NFT_STATUS_DIR}/${iface}.status"
+
+	# Update nftables rules
+	mwan3nft_nft_update_interface "$iface" "offline"
+
+	# Update routing policy
+	mwan3nft_policy_update_interface "$iface" "offline"
+
+	mwan3nft_unlock
+}
+
+cmd_ifupdate() {
+	local iface="$1"
+
+	[ -z "$iface" ] && {
+		echo "Error: interface name required"
+		exit 1
+	}
+
+	mwan3nft_lock
+
+	mwan3nft_log "info" "Interface update: $iface"
+
+	config_load mwan3nft
+
+	# Refresh nftables rules for this interface
+	mwan3nft_nft_refresh_interface "$iface"
+
+	# Refresh routing policy for this interface
+	mwan3nft_policy_refresh_interface "$iface"
+
+	mwan3nft_unlock
+}
+
+cmd_use() {
+	local iface="$1"
+	local policy="$2"
+
+	[ -z "$iface" ] || [ -z "$policy" ] && {
+		echo "Error: interface and policy required"
+		echo "Usage: mwan3nft use <interface> <policy>"
+		exit 1
+	}
+
+	mwan3nft_lock
+
+	mwan3nft_log "info" "Forcing policy $policy to use interface $iface"
+
+	# This is a manual override - update the policy to use only this interface
+	mwan3nft_policy_force_interface "$policy" "$iface"
+
+	mwan3nft_unlock
+}
+
+# Main
+[ $# -lt 1 ] && usage
+
+command="$1"
+shift
+
+case "$command" in
+	start)
+		cmd_start
+		;;
+	stop)
+		cmd_stop
+		;;
+	restart)
+		cmd_restart
+		;;
+	reload)
+		cmd_reload
+		;;
+	status)
+		cmd_status
+		;;
+	interfaces)
+		cmd_interfaces
+		;;
+	policies)
+		cmd_policies
+		;;
+	rules)
+		cmd_rules
+		;;
+	ifup)
+		cmd_ifup "$@"
+		;;
+	ifdown)
+		cmd_ifdown "$@"
+		;;
+	ifupdate)
+		cmd_ifupdate "$@"
+		;;
+	use)
+		cmd_use "$@"
+		;;
+	*)
+		usage
+		;;
+esac
+
+exit 0

@@ -1,0 +1,53 @@
+{
+	"admin/network/mwan3nft": {
+		"title": "MultiWAN NFT",
+		"order": 60,
+		"action": {
+			"type": "firstchild"
+		},
+		"depends": {
+			"acl": [ "luci-app-mwan3nft" ],
+			"uci": { "mwan3nft": true }
+		}
+	},
+	"admin/network/mwan3nft/overview": {
+		"title": "Overview",
+		"order": 10,
+		"action": {
+			"type": "view",
+			"path": "mwan3nft/overview"
+		}
+	},
+	"admin/network/mwan3nft/interface": {
+		"title": "Interfaces",
+		"order": 20,
+		"action": {
+			"type": "view",
+			"path": "mwan3nft/interface"
+		}
+	},
+	"admin/network/mwan3nft/member": {
+		"title": "Members",
+		"order": 30,
+		"action": {
+			"type": "view",
+			"path": "mwan3nft/member"
+		}
+	},
+	"admin/network/mwan3nft/policy": {
+		"title": "Policies",
+		"order": 40,
+		"action": {
+			"type": "view",
+			"path": "mwan3nft/policy"
+		}
+	},
+	"admin/network/mwan3nft/rule": {
+		"title": "Rules",
+		"order": 50,
+		"action": {
+			"type": "view",
+			"path": "mwan3nft/rule"
+		}
+	}
+}
