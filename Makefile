@@ -47,9 +47,16 @@ define Package/mwan3nft/install
 	$(INSTALL_DATA) ./files/usr/lib/mwan3nft/common.sh $(1)/usr/lib/mwan3nft/common.sh
 	$(INSTALL_DATA) ./files/usr/lib/mwan3nft/nft.sh $(1)/usr/lib/mwan3nft/nft.sh
 	$(INSTALL_DATA) ./files/usr/lib/mwan3nft/policy.sh $(1)/usr/lib/mwan3nft/policy.sh
-	# Fix Windows CRLF line endings using tr (more portable than sed octal)
-	find $(1) -type f \( -name '*.sh' -o -name 'mwan3nft' -o -name 'mwan3nft-track' -o -name '15-mwan3nft' \) -exec sh -c 'for f; do tr -d "\015" < "$$f" > "$$f.tmp" && mv "$$f.tmp" "$$f"; done' _ {} +
-	for f in $(1)/etc/config/mwan3nft $(1)/etc/init.d/mwan3nft; do tr -d '\015' < "$$f" > "$$f.tmp" && mv "$$f.tmp" "$$f"; done
+	# Fix Windows CRLF line endings
+	tr -d '\015' < $(1)/usr/sbin/mwan3nft > $(1)/usr/sbin/mwan3nft.tmp && mv $(1)/usr/sbin/mwan3nft.tmp $(1)/usr/sbin/mwan3nft
+	tr -d '\015' < $(1)/usr/sbin/mwan3nft-track > $(1)/usr/sbin/mwan3nft-track.tmp && mv $(1)/usr/sbin/mwan3nft-track.tmp $(1)/usr/sbin/mwan3nft-track
+	tr -d '\015' < $(1)/etc/init.d/mwan3nft > $(1)/etc/init.d/mwan3nft.tmp && mv $(1)/etc/init.d/mwan3nft.tmp $(1)/etc/init.d/mwan3nft
+	tr -d '\015' < $(1)/etc/hotplug.d/iface/15-mwan3nft > $(1)/etc/hotplug.d/iface/15-mwan3nft.tmp && mv $(1)/etc/hotplug.d/iface/15-mwan3nft.tmp $(1)/etc/hotplug.d/iface/15-mwan3nft
+	tr -d '\015' < $(1)/usr/lib/mwan3nft/common.sh > $(1)/usr/lib/mwan3nft/common.sh.tmp && mv $(1)/usr/lib/mwan3nft/common.sh.tmp $(1)/usr/lib/mwan3nft/common.sh
+	tr -d '\015' < $(1)/usr/lib/mwan3nft/nft.sh > $(1)/usr/lib/mwan3nft/nft.sh.tmp && mv $(1)/usr/lib/mwan3nft/nft.sh.tmp $(1)/usr/lib/mwan3nft/nft.sh
+	tr -d '\015' < $(1)/usr/lib/mwan3nft/policy.sh > $(1)/usr/lib/mwan3nft/policy.sh.tmp && mv $(1)/usr/lib/mwan3nft/policy.sh.tmp $(1)/usr/lib/mwan3nft/policy.sh
+	tr -d '\015' < $(1)/etc/config/mwan3nft > $(1)/etc/config/mwan3nft.tmp && mv $(1)/etc/config/mwan3nft.tmp $(1)/etc/config/mwan3nft
+	chmod 755 $(1)/usr/sbin/mwan3nft $(1)/usr/sbin/mwan3nft-track $(1)/etc/init.d/mwan3nft
 endef
 
 $(eval $(call BuildPackage,mwan3nft))
