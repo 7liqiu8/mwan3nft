@@ -1,0 +1,117 @@
+# mwan3nft configuration
+
+config globals 'globals'
+	option enabled '1'
+	option mmx_mask '0x3F00'
+	option local_source 'lan'
+
+# Interface configuration example
+# Each interface represents a WAN connection
+config interface 'wan'
+	option enabled '1'
+	option family 'ipv4'
+	option track_ip '223.5.5.5 119.29.29.29 8.8.8.8'
+	option track_method 'ping'
+	option reliability '1'
+	option count '1'
+	option size '56'
+	option max_ttl '60'
+	option timeout '4'
+	option interval '10'
+	option failure_interval '5'
+	option recovery_interval '5'
+	option down '5'
+	option up '5'
+	option initial_state 'offline'
+
+config interface 'wan2'
+	option enabled '0'
+	option family 'ipv4'
+	option track_ip '223.5.5.5 119.29.29.29 8.8.8.8'
+	option track_method 'ping'
+	option reliability '1'
+	option count '1'
+	option size '56'
+	option max_ttl '60'
+	option timeout '4'
+	option interval '10'
+	option failure_interval '5'
+	option recovery_interval '5'
+	option down '5'
+	option up '5'
+	option initial_state 'offline'
+
+# Member configuration
+# Members link interfaces with metrics and weights
+config member 'wan_m1_w1'
+	option interface 'wan'
+	option metric '1'
+	option weight '1'
+
+config member 'wan_m2_w1'
+	option interface 'wan'
+	option metric '2'
+	option weight '1'
+
+config member 'wan2_m1_w1'
+	option interface 'wan2'
+	option metric '1'
+	option weight '1'
+
+config member 'wan2_m2_w1'
+	option interface 'wan2'
+	option metric '2'
+	option weight '1'
+
+# Policy configuration
+# Policies define how traffic is distributed across members
+config policy 'wan_only'
+	list use_member 'wan_m1_w1'
+	option last_resort 'default'
+
+config policy 'wan2_only'
+	list use_member 'wan2_m1_w1'
+	option last_resort 'default'
+
+config policy 'balanced'
+	list use_member 'wan_m1_w1'
+	list use_member 'wan2_m1_w1'
+	option last_resort 'default'
+
+config policy 'wan_wan2'
+	list use_member 'wan_m1_w1'
+	list use_member 'wan2_m2_w1'
+	option last_resort 'default'
+
+config policy 'wan2_wan'
+	list use_member 'wan2_m1_w1'
+	list use_member 'wan_m2_w1'
+	option last_resort 'default'
+
+# Rule configuration
+# Rules match traffic and apply policies
+config rule 'default_rule'
+	option dest_ip '0.0.0.0/0'
+	option use_policy 'balanced'
+	option family 'ipv4'
+	option sticky '1'
+
+# Exclude local traffic and special applications
+config rule 'exclude_local'
+	option dest_ip '10.0.0.0/8 172.16.0.0/12 192.168.0.0/16'
+	option use_policy 'default'
+	option family 'ipv4'
+
+# OpenClash compatibility - exclude tproxy traffic
+config rule 'openclash_exclude'
+	option proto 'tcp udp'
+	option dest_port '7891 7892 7893 9090'
+	option use_policy 'default'
+	option family 'ipv4'
+
+# Lucky compatibility - exclude lucky ports
+config rule 'lucky_exclude'
+	option proto 'tcp udp'
+	option dest_port '16601'
+	option use_policy 'default'
+	option family 'ipv4'
